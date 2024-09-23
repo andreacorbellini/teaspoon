@@ -1,0 +1,22 @@
+[package]
+name = "teaspoon"
+version = "0.1.0"
+edition = "2021"
+
+license = "BSD-3-Clause"
+authors = ["Andrea Corbellini <corbellini.andrea@gmail.com>"]
+description = "An allocator for when all you have is a teaspoon of memory"
+repository = "https://github.com/andreacorbellini/teaspoon"
+
+keywords = ["memory", "allocator", "no-std"]
+categories = ["memory-management", "no-std"]
+
+[dependencies]
+spin = { version = "0.9.8", default-features = false, features = ["mutex", "spin_mutex"] }
+
+[dev-dependencies]
+rand = { version = "0.8.5", default-features = false, features = ["small_rng"] }
+
+[features]
+allocator-api = []
+lazy = ["spin/lazy"]
