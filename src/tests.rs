@@ -16,10 +16,6 @@ use core::alloc::AllocError;
 use core::alloc::Allocator;
 use core::alloc::Layout;
 use core::ptr::NonNull;
-use rand::Rng;
-use rand::SeedableRng;
-use rand::rngs::SmallRng;
-use rand::seq::SliceRandom;
 
 macro_rules! assert_aligned {
     ( $ptr:expr , $layout:expr $( , $( $tt:tt )* )? ) => {
@@ -74,6 +70,11 @@ fn zst<S: Sizing>() {
 
 #[cfg(not(miri))]
 fn random<S: Sizing>() {
+    use rand::Rng;
+    use rand::SeedableRng;
+    use rand::rngs::SmallRng;
+    use rand::seq::SliceRandom;
+
     fn random_layout<R: Rng>(mut rng: R) -> Layout {
         let size = rng.gen_range(0..=512);
         let align = [1usize, 2, 4, 8, 16, 32, 64]
