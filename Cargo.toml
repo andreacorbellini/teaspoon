@@ -15,7 +15,7 @@ categories = ["memory-management", "no-std"]
 spin = { version = "0.12.1", default-features = false, features = ["mutex", "spin_mutex"] }
 
 [dev-dependencies]
-rand = { version = "0.8.5", default-features = false, features = ["small_rng"] }
+rand = { version = "0.10.1", default-features = false }
 
 [features]
 allocator-api = []

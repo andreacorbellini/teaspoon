@@ -71,12 +71,14 @@ fn zst<S: Sizing>() {
 #[cfg(not(miri))]
 fn random<S: Sizing>() {
     use rand::Rng;
+    use rand::RngExt;
     use rand::SeedableRng;
     use rand::rngs::SmallRng;
-    use rand::seq::SliceRandom;
+    use rand::seq::IndexedMutRandom;
+    use rand::seq::IndexedRandom;
 
     fn random_layout<R: Rng>(mut rng: R) -> Layout {
-        let size = rng.gen_range(0..=512);
+        let size = rng.random_range(0..=512);
         let align = [1usize, 2, 4, 8, 16, 32, 64]
             .choose(&mut rng)
             .copied()
@@ -104,7 +106,7 @@ fn random<S: Sizing>() {
         if objects.is_empty() {
             return;
         }
-        let index = rng.gen_range(0..objects.len());
+        let index = rng.random_range(0..objects.len());
         let (ptr, layout) = objects.remove(index);
         unsafe { allocator.deallocate(ptr.cast(), layout) }
     }
@@ -139,7 +141,7 @@ fn random<S: Sizing>() {
     let mut objects = Vec::<(NonNull<[u8]>, Layout)>::new();
 
     for _ in 0..2000 {
-        match rng.gen_range(0..8) {
+        match rng.random_range(0..8) {
             0 => dealloc_random(&spoon, &mut rng, &mut objects),
             1 => resize_random(&spoon, &mut rng, &mut objects),
             _ => alloc_random(&spoon, &mut rng, &mut objects),
