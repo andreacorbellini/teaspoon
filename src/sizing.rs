@@ -240,7 +240,7 @@ impl Sizing16MiB {
     #[inline]
     const fn write_compact_value(a: u64, b: u64, c: u64) -> u64 {
         let mut value = c >> Self::MIN_ALIGN_BITS;
-        value <<= Self::SIZE_BITS;
+        value <<= Self::OFFSET_BITS;
         value |= b >> Self::MIN_ALIGN_BITS;
         value <<= Self::OFFSET_BITS;
         value |= a >> Self::MIN_ALIGN_BITS;
