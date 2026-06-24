@@ -1,8 +1,8 @@
 // Copyright © 2024 Andrea Corbellini and contributors
 // SPDX-License-Identifier: BSD-3-Clause
 
-use crate::sizing::Sizing;
 use crate::Arena;
+use crate::sizing::Sizing;
 use core::alloc::Layout;
 use core::fmt;
 use core::marker::PhantomData;
