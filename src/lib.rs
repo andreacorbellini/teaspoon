@@ -101,12 +101,13 @@
 //! `main.rs`:
 //!
 //! ```
-//! # #[allow(static_mut_refs)]
+//! # #![allow(static_mut_refs)]
 //! # #[cfg(feature = "lazy")]
-//! # {
 //! use teaspoon::Teaspoon4KiB;
+//! # #[cfg(feature = "lazy")]
 //! use teaspoon::lazy::LazyTeaspoon4KiB;
 //!
+//! # #[cfg(feature = "lazy")]
 //! #[global_allocator]
 //! static SPOON: LazyTeaspoon4KiB = LazyTeaspoon4KiB::new(|| {
 //!     static mut MEMORY: [u8; 1024] = [0u8; 1024];
@@ -114,7 +115,6 @@
 //!     // this `Teaspoon4KiB`, and no other reference can be created.
 //!     Teaspoon4KiB::from(unsafe { &mut MEMORY })
 //! });
-//! # }
 //! ```
 //!
 //! [`LazyTeaspoon`](lazy::LazyTeaspoon) is initialized on first use by calling the initialization
