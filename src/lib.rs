@@ -219,7 +219,6 @@
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
-#![warn(unused_crate_dependencies)]
 #![warn(unused_macro_rules)]
 #![warn(unused_qualifications)]
 #![doc(test(attr(deny(warnings))))]
