@@ -64,7 +64,7 @@ impl Sizing for Sizing4KiB {}
 
 impl private::Sealed for Sizing4KiB {}
 
-const_assert!(align_of::<u32>() % Sizing4KiB::MIN_ALIGN == 0);
+const_assert!(align_of::<u32>().is_multiple_of(Sizing4KiB::MIN_ALIGN));
 
 impl Sizing4KiB {
     const MIN_ALIGN: usize = 4;
@@ -211,7 +211,7 @@ impl Sizing for Sizing16MiB {}
 
 impl private::Sealed for Sizing16MiB {}
 
-const_assert!(align_of::<u64>() % Sizing16MiB::MIN_ALIGN == 0);
+const_assert!(align_of::<u64>().is_multiple_of(Sizing16MiB::MIN_ALIGN));
 
 impl Sizing16MiB {
     const MIN_ALIGN: usize = 8;
@@ -358,8 +358,8 @@ impl Sizing for Sizing128KiB {}
 
 impl private::Sealed for Sizing128KiB {}
 
-const_assert!(align_of::<[u16; 2]>() % Sizing128KiB::MIN_ALIGN == 0);
-const_assert!(align_of::<[u16; 3]>() % Sizing128KiB::MIN_ALIGN == 0);
+const_assert!(align_of::<[u16; 2]>().is_multiple_of(Sizing128KiB::MIN_ALIGN));
+const_assert!(align_of::<[u16; 3]>().is_multiple_of(Sizing128KiB::MIN_ALIGN));
 
 impl Sizing128KiB {
     const MIN_ALIGN: usize = 2;

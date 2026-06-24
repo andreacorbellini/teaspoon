@@ -5,11 +5,11 @@
 //!
 //! See [`LazyTeaspoon`] for information and examples.
 
-use crate::sizing::Sizing;
-use crate::sizing::Sizing128KiB;
-use crate::sizing::Sizing16MiB;
-use crate::sizing::Sizing4KiB;
 use crate::Teaspoon;
+use crate::sizing::Sizing;
+use crate::sizing::Sizing4KiB;
+use crate::sizing::Sizing16MiB;
+use crate::sizing::Sizing128KiB;
 use core::alloc::GlobalAlloc;
 use core::alloc::Layout;
 use core::ops::Deref;
@@ -61,8 +61,8 @@ pub type LazyTeaspoon4KiB<F = fn() -> Teaspoon<'static, Sizing4KiB>> = LazyTeasp
 ///
 /// ```
 /// # #![allow(static_mut_refs)]
-/// use teaspoon::lazy::LazyTeaspoon4KiB;
 /// use teaspoon::Teaspoon4KiB;
+/// use teaspoon::lazy::LazyTeaspoon4KiB;
 ///
 /// #[global_allocator]
 /// static SPOON: LazyTeaspoon4KiB = LazyTeaspoon4KiB::new(|| {
@@ -126,7 +126,8 @@ unsafe impl<S: Sizing, F: FnOnce() -> Teaspoon<'static, S>> Allocator for LazyTe
     }
 
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        self.get().deallocate(ptr, layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().deallocate(ptr, layout) }
     }
 
     unsafe fn grow(
@@ -135,7 +136,8 @@ unsafe impl<S: Sizing, F: FnOnce() -> Teaspoon<'static, S>> Allocator for LazyTe
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        self.get().grow(ptr, old_layout, new_layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().grow(ptr, old_layout, new_layout) }
     }
 
     unsafe fn grow_zeroed(
@@ -144,7 +146,8 @@ unsafe impl<S: Sizing, F: FnOnce() -> Teaspoon<'static, S>> Allocator for LazyTe
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        self.get().grow_zeroed(ptr, old_layout, new_layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().grow_zeroed(ptr, old_layout, new_layout) }
     }
 
     unsafe fn shrink(
@@ -153,24 +156,29 @@ unsafe impl<S: Sizing, F: FnOnce() -> Teaspoon<'static, S>> Allocator for LazyTe
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        self.get().shrink(ptr, old_layout, new_layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().shrink(ptr, old_layout, new_layout) }
     }
 }
 
 unsafe impl<S: Sizing, F: FnOnce() -> Teaspoon<'static, S>> GlobalAlloc for LazyTeaspoon<S, F> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        self.get().alloc(layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().alloc(layout) }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        self.get().alloc_zeroed(layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().alloc_zeroed(layout) }
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        self.get().dealloc(ptr, layout)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().dealloc(ptr, layout) }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, old_layout: Layout, new_size: usize) -> *mut u8 {
-        self.get().realloc(ptr, old_layout, new_size)
+        // SAFETY: upheld by the caller
+        unsafe { self.get().realloc(ptr, old_layout, new_size) }
     }
 }

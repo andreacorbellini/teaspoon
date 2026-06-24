@@ -104,8 +104,8 @@
 //! # #[allow(static_mut_refs)]
 //! # #[cfg(feature = "lazy")]
 //! # {
-//! use teaspoon::lazy::LazyTeaspoon4KiB;
 //! use teaspoon::Teaspoon4KiB;
+//! use teaspoon::lazy::LazyTeaspoon4KiB;
 //!
 //! #[global_allocator]
 //! static SPOON: LazyTeaspoon4KiB = LazyTeaspoon4KiB::new(|| {
@@ -146,6 +146,7 @@
 //! `main.rs`:
 //!
 //! ```
+//! # #![allow(unused_features)]
 //! #![feature(allocator_api)]
 //!
 //! # #[cfg(feature = "allocator-api")]
@@ -212,6 +213,9 @@
 #![warn(clippy::dbg_macro)]
 #![warn(clippy::print_stderr)]
 #![warn(clippy::print_stdout)]
+#![warn(clippy::unnecessary_safety_doc)]
+#![warn(clippy::unnecessary_safety_comment)]
+#![warn(clippy::undocumented_unsafe_blocks)]
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
 #![warn(unreachable_pub)]
@@ -250,9 +254,9 @@ use core::alloc::AllocError;
 use core::alloc::Allocator;
 
 pub use crate::sizing::Sizing;
-pub use crate::sizing::Sizing128KiB;
-pub use crate::sizing::Sizing16MiB;
 pub use crate::sizing::Sizing4KiB;
+pub use crate::sizing::Sizing16MiB;
+pub use crate::sizing::Sizing128KiB;
 pub use crate::usage::Usage;
 
 /// Allocator that supports allocating objects up to 128 KiB.
@@ -349,7 +353,8 @@ impl<'a, S: Sizing> Teaspoon<'a, S> {
     #[inline]
     #[must_use]
     pub unsafe fn from_ptr(ptr: *mut [u8]) -> Self {
-        Self::from_ptr_size(ptr.cast(), ptr.len())
+        // SAFETY: upheld by the caller
+        unsafe { Self::from_ptr_size(ptr.cast(), ptr.len()) }
     }
 
     /// Constructs a Teaspoon memory allocator from a pointer and a size.
@@ -387,7 +392,8 @@ impl<'a, S: Sizing> Teaspoon<'a, S> {
     #[must_use]
     pub unsafe fn from_ptr_size(ptr: *mut u8, size: usize) -> Self {
         Self {
-            inner: Mutex::new(TeaspoonInner::from_ptr_size(ptr, size)),
+            // SAFETY: upheld by the caller
+            inner: Mutex::new(unsafe { TeaspoonInner::from_ptr_size(ptr, size) }),
         }
     }
 
@@ -426,7 +432,8 @@ impl<'a, S: Sizing> Teaspoon<'a, S> {
     #[inline]
     #[must_use]
     pub unsafe fn from_addr_size(addr: usize, size: usize) -> Self {
-        Self::from_ptr_size(addr as *mut u8, size)
+        // SAFETY: upheld by the caller
+        unsafe { Self::from_ptr_size(addr as *mut u8, size) }
     }
 
     /// Returns memory usage information for this Teaspoon allocator.
@@ -446,6 +453,7 @@ impl<'a, S: Sizing> Teaspoon<'a, S> {
     /// # Examples
     ///
     /// ```
+    /// # #![allow(unused_features)]
     /// #![feature(allocator_api)]
     ///
     /// # #[cfg(feature = "allocator-api")]
@@ -508,35 +516,59 @@ unsafe impl<'a, S: Sizing> Allocator for Teaspoon<'a, S> {
         self.inner.lock().allocate(layout).ok_or(AllocError)
     }
 
+    /// # Safety
+    ///
+    /// `ptr` must be a pointer that was previously returned by this object, and must have not been
+    /// previously deallocated.
     unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-        let data_ptr = SegmentDataPtr::new(ptr);
-        self.inner.lock().deallocate(data_ptr, layout)
+        // SAFETY: The caller ensures that `ptr` is pointing to the start of the data section of a
+        // segment.
+        unsafe {
+            let data_ptr = SegmentDataPtr::new(ptr);
+            self.inner.lock().deallocate(data_ptr, layout)
+        }
     }
 
+    /// # Safety
+    ///
+    /// `ptr` must be a pointer that was previously returned by this object, and must have not been
+    /// previously deallocated.
     unsafe fn grow(
         &self,
         ptr: NonNull<u8>,
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        let data_ptr = SegmentDataPtr::new(ptr);
-        self.inner
-            .lock()
-            .grow(data_ptr, old_layout, new_layout)
-            .ok_or(AllocError)
+        // SAFETY: The caller ensures that `ptr` is pointing to the start of the data section of a
+        // segment.
+        unsafe {
+            let data_ptr = SegmentDataPtr::new(ptr);
+            self.inner
+                .lock()
+                .grow(data_ptr, old_layout, new_layout)
+                .ok_or(AllocError)
+        }
     }
 
+    /// # Safety
+    ///
+    /// `ptr` must be a pointer that was previously returned by this object, and must have not been
+    /// previously deallocated.
     unsafe fn shrink(
         &self,
         ptr: NonNull<u8>,
         old_layout: Layout,
         new_layout: Layout,
     ) -> Result<NonNull<[u8]>, AllocError> {
-        let data_ptr = SegmentDataPtr::new(ptr);
-        self.inner
-            .lock()
-            .shrink(data_ptr, old_layout, new_layout)
-            .ok_or(AllocError)
+        // SAFETY: The caller ensures that `ptr` is pointing to the start of the data section of a
+        // segment.
+        unsafe {
+            let data_ptr = SegmentDataPtr::new(ptr);
+            self.inner
+                .lock()
+                .shrink(data_ptr, old_layout, new_layout)
+                .ok_or(AllocError)
+        }
     }
 }
 
@@ -550,18 +582,24 @@ unsafe impl<'a, S: Sizing> GlobalAlloc for Teaspoon<'a, S> {
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        let data_ptr = SegmentDataPtr::new(NonNull::new_unchecked(ptr));
-        self.inner.lock().deallocate(data_ptr, layout)
+        // SAFETY: Upheld by the caller.
+        unsafe {
+            let data_ptr = SegmentDataPtr::new(NonNull::new_unchecked(ptr));
+            self.inner.lock().deallocate(data_ptr, layout)
+        }
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, old_layout: Layout, new_size: usize) -> *mut u8 {
-        let data_ptr = SegmentDataPtr::new(NonNull::new_unchecked(ptr));
-        let new_layout = Layout::from_size_align_unchecked(new_size, old_layout.align());
-        self.inner
-            .lock()
-            .resize(data_ptr, old_layout, new_layout)
-            .map(|ptr| ptr.cast().as_ptr())
-            .unwrap_or_else(core::ptr::null_mut)
+        // SAFETY: Upheld by the caller.
+        unsafe {
+            let data_ptr = SegmentDataPtr::new(NonNull::new_unchecked(ptr));
+            let new_layout = Layout::from_size_align_unchecked(new_size, old_layout.align());
+            self.inner
+                .lock()
+                .resize(data_ptr, old_layout, new_layout)
+                .map(|ptr| ptr.cast().as_ptr())
+                .unwrap_or_else(core::ptr::null_mut)
+        }
     }
 }
 
@@ -580,12 +618,23 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
         }
     }
 
+    /// # Safety
+    ///
+    /// - `ptr` must be ["dereferenceable"](std::ptr#safety).
+    /// - `ptr` must be valid for reads and writes.
+    /// - `ptr` must be alive for the lifetime of `'a`.
+    /// - `ptr` must not be an [*alias*](https://doc.rust-lang.org/nomicon/aliasing.html) for
+    ///   another reference or pointer (in other words, `slice` is a *unique* pointer).
+    /// * `ptr` must point to a contiguous memory location that is part of the same [allocated
+    ///   object](https://doc.rust-lang.org/std/ptr/index.html#allocated-object) of at least `size`
+    ///   bytes.
     #[inline]
     #[must_use]
     unsafe fn from_ptr_size(ptr: *mut u8, size: usize) -> Self {
         let ptr = NonNull::new(ptr).expect("expected non-null pointer");
         let slice = NonNull::slice_from_raw_parts(ptr, size);
-        let arena = Arena::new(slice);
+        // SAFETY: upheld by the caller
+        let arena = unsafe { Arena::new(slice) };
         Self { arena }
     }
 
@@ -633,11 +682,16 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
             "arena is expected to be empty, but has a tail pointer"
         );
 
+        // SAFETY: `self.arena.usable()` returns a valid pointer that is part of `self.arena` and
+        // is unallocated.
         let segment = unsafe { Segment::new_in(self.arena, self.arena.usable(), layout)? };
         segment.write();
 
-        self.arena.set_head(Some(segment.ptr()));
-        self.arena.set_tail(Some(segment.ptr()));
+        // SAFETY: `segment` was constructed from `self.arena`, therefore it belongs to it.
+        unsafe {
+            self.arena.set_head(Some(segment.ptr()));
+            self.arena.set_tail(Some(segment.ptr()));
+        }
 
         Some(segment.data(layout))
     }
@@ -656,13 +710,20 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
             "arena is expected to be non-empty, but does not have a tail pointer"
         );
 
+        // SAFETY: `self.arena.usable()` returns a valid pointer that is part of `self.arena` and
+        // is unallocated.
         let mut tail_segment =
             unsafe { Segment::read(self.arena, self.arena.tail().unwrap_unchecked()) };
+        // SAFETY: `self.arena.usable()` returns a valid pointer that is part of `self.arena` and
+        // is unallocated.
         let mut new_segment =
             unsafe { Segment::new_in(self.arena, tail_segment.trailing(), layout)? };
         Segment::connect(&mut tail_segment, &mut new_segment);
 
-        self.arena.set_tail(Some(new_segment.ptr()));
+        // SAFETY: `new_segment` was constructed from `self.arena`, therefore it belongs to it.
+        unsafe {
+            self.arena.set_tail(Some(new_segment.ptr()));
+        }
 
         Some(new_segment.data(layout))
     }
@@ -682,6 +743,8 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
                     prev_segment = Some(segment);
                 }
                 Chunk::Unused(unused) => {
+                    // SAFETY: `unused` is a valid pointer that is part of `self.arena` and is
+                    // unallocated.
                     if let Some(mut new_segment) =
                         unsafe { Segment::new_in(self.arena, unused, layout) }
                     {
@@ -691,13 +754,15 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
                         };
 
                         match prev_segment {
-                            None => self.arena.set_head(Some(new_segment.ptr())),
+                            // SAFETY: `new_segment` belongs to `self.arena`.
+                            None => unsafe { self.arena.set_head(Some(new_segment.ptr())) },
                             Some(mut prev_segment) => {
                                 Segment::connect(&mut prev_segment, &mut new_segment)
                             }
                         }
                         match next_segment {
-                            None => self.arena.set_tail(Some(new_segment.ptr())),
+                            // SAFETY: `new_segment` belongs to `self.arena`.
+                            None => unsafe { self.arena.set_tail(Some(new_segment.ptr())) },
                             Some(mut next_segment) => {
                                 Segment::connect(&mut new_segment, &mut next_segment)
                             }
@@ -712,18 +777,27 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
         None
     }
 
-    fn deallocate(&mut self, data_ptr: SegmentDataPtr<S>, layout: Layout) {
+    /// # Safety
+    ///
+    /// `data_ptr` must point to the start of the data of a segment that belongs to this arena.
+    unsafe fn deallocate(&mut self, data_ptr: SegmentDataPtr<S>, layout: Layout) {
         if layout.size() == 0 {
             // `data_ptr` is a dangling pointer previously returned by `allocate()`; it doesn't
             // have a corresponding segment
             return;
         }
 
-        let segment = unsafe { Segment::read(self.arena, data_ptr.to_header_ptr()) };
-        self.remove_segment(segment)
+        // SAFETY: Upheld by the caller.
+        unsafe {
+            let segment = Segment::read(self.arena, data_ptr.to_header_ptr());
+            self.remove_segment(segment)
+        }
     }
 
-    fn remove_segment(&mut self, segment: Segment<'a, S>) {
+    /// # Safety
+    ///
+    /// `segment` must belong to this arena.
+    unsafe fn remove_segment(&mut self, segment: Segment<'a, S>) {
         debug_assert!(
             self.arena.head().is_some(),
             "arena is expected to be non-empty, but does not have a head pointer"
@@ -734,17 +808,26 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
         );
 
         if segment.prev_ptr().is_none() {
-            self.arena.set_head(segment.next_ptr());
+            // SAFETY: The caller ensures that `segment` belongs to `self.arena`.
+            // `segment.next_ptr()` is always a valid pointer to a segment that belongs to the same
+            // arena.
+            unsafe { self.arena.set_head(segment.next_ptr()) };
         }
         if segment.next_ptr().is_none() {
-            self.arena.set_tail(segment.prev_ptr());
+            // SAFETY: The caller ensures that `segment` belongs to `self.arena`.
+            // `segment.prev_ptr()` is always a valid pointer to a segment that belongs to the same
+            // arena.
+            unsafe { self.arena.set_tail(segment.prev_ptr()) };
         }
 
         segment.disconnect();
     }
 
+    /// # Safety
+    ///
+    /// `data_ptr` must point to the start of the data of a segment that belongs to this arena.
     #[cfg(feature = "allocator-api")]
-    fn grow(
+    unsafe fn grow(
         &mut self,
         data_ptr: SegmentDataPtr<S>,
         old_layout: Layout,
@@ -754,11 +837,15 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
             new_layout.size() >= old_layout.size(),
             "`new_layout` must be bigger than or equal to `old_layout`"
         );
-        self.resize(data_ptr, old_layout, new_layout)
+        // SAFETY: Upheld by the caller.
+        unsafe { self.resize(data_ptr, old_layout, new_layout) }
     }
 
+    /// # Safety
+    ///
+    /// `data_ptr` must point to the start of the data of a segment that belongs to this arena.
     #[cfg(feature = "allocator-api")]
-    fn shrink(
+    unsafe fn shrink(
         &mut self,
         data_ptr: SegmentDataPtr<S>,
         old_layout: Layout,
@@ -768,10 +855,14 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
             new_layout.size() <= old_layout.size(),
             "`new_layout` must be smaller than or equal to `old_layout`"
         );
-        self.resize(data_ptr, old_layout, new_layout)
+        // SAFETY: Upheld by the caller.
+        unsafe { self.resize(data_ptr, old_layout, new_layout) }
     }
 
-    fn resize(
+    /// # Safety
+    ///
+    /// `data_ptr` must point to the start of the data of a segment that belongs to this arena.
+    unsafe fn resize(
         &mut self,
         data_ptr: SegmentDataPtr<S>,
         old_layout: Layout,
@@ -781,7 +872,9 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
             // If `old_layout` is zero-sized, then `data_ptr` is a dangling pointer, and it doesn't
             // have a corresponding segment. If `new_layout` is zero-sized, then we need to return
             // a dangling pointer.
-            self.deallocate(data_ptr, old_layout);
+            //
+            // SAFETY: Upheld by the caller.
+            unsafe { self.deallocate(data_ptr, old_layout) };
             return self.allocate(new_layout);
         }
 
@@ -808,7 +901,8 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
                         copy_size,
                     )
                 };
-                self.remove_segment(old_segment);
+                // SAFETY: The caller ensures that `old_segment` belongs to this arena.
+                unsafe { self.remove_segment(old_segment) };
                 Some(new_data)
             }
             Some(mut new_segment) => {
@@ -822,11 +916,13 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
                 };
 
                 match old_segment.prev() {
-                    None => self.arena.set_head(Some(new_segment.ptr())),
+                    // SAFETY: `new_segment` belongs to this arena.
+                    None => unsafe { self.arena.set_head(Some(new_segment.ptr())) },
                     Some(mut prev) => Segment::connect(&mut prev, &mut new_segment),
                 }
                 match old_segment.next() {
-                    None => self.arena.set_tail(Some(new_segment.ptr())),
+                    // SAFETY: `new_segment` belongs to this arena.
+                    None => unsafe { self.arena.set_tail(Some(new_segment.ptr())) },
                     Some(mut next) => Segment::connect(&mut new_segment, &mut next),
                 }
 

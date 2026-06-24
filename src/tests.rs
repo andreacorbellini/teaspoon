@@ -15,10 +15,10 @@ use core::alloc::AllocError;
 use core::alloc::Allocator;
 use core::alloc::Layout;
 use core::ptr::NonNull;
-use rand::rngs::SmallRng;
-use rand::seq::SliceRandom;
 use rand::Rng;
 use rand::SeedableRng;
+use rand::rngs::SmallRng;
+use rand::seq::SliceRandom;
 
 macro_rules! assert_aligned {
     ( $ptr:expr , $layout:expr $( , $( $tt:tt )* )? ) => {

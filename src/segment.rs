@@ -31,8 +31,9 @@ impl<'a, S: Sizing> Segment<'a, S> {
     ///
     /// # Safety
     ///
-    /// `slice` must point to a contiguous memory location that is part of the same [allocated
-    /// object](https://doc.rust-lang.org/std/ptr/index.html#allocated-object).
+    /// * `slice` must point to a contiguous memory location that is part of the same [allocated
+    ///   object](https://doc.rust-lang.org/std/ptr/index.html#allocated-object).
+    /// * `slice` must be valid for writes.
     #[must_use]
     unsafe fn placement(slice: NonNull<[u8]>, data_layout: Layout) -> Option<NonNull<[u8]>> {
         let header_layout = Layout::new::<S::SegmentHeaderRepr>();
@@ -51,8 +52,10 @@ impl<'a, S: Sizing> Segment<'a, S> {
             return None;
         }
 
-        let header_start = start.byte_add(header_pad);
-        let header_end = header_start.byte_add(header_layout.size());
+        // SAFETY: We verified that `slice` is large enough to contain the aligned header.
+        let header_start = unsafe { start.byte_add(header_pad) };
+        // SAFETY: We verified that `slice` is large enough to contain the aligned header.
+        let header_end = unsafe { header_start.byte_add(header_layout.size()) };
 
         // Find an initial (not optimized) value for `data_pad` necessary to ensure that the data
         // is properly aligned.
@@ -68,7 +71,9 @@ impl<'a, S: Sizing> Segment<'a, S> {
             0,
             "expected data padding to be a multiple of the header alignment"
         );
-        let header_start = header_start.byte_add(data_pad);
+        // SAFETY: We verified that `slice` is large enough to contain the aligned header and the
+        // data.
+        let header_start = unsafe { header_start.byte_add(data_pad) };
 
         // Ensure that the final data size is a multiple of `S::min_align()`
         let data_size = data_layout
@@ -92,6 +97,7 @@ impl<'a, S: Sizing> Segment<'a, S> {
     ///
     /// * `slice` must be part of `arena`.
     /// * `slice` must point to unallocated memory.
+    /// * `slice` must be valid for writes.
     #[must_use]
     pub(crate) unsafe fn new_in(
         arena: Arena<'a, S>,
@@ -100,11 +106,16 @@ impl<'a, S: Sizing> Segment<'a, S> {
     ) -> Option<Self> {
         debug_assert!(arena.contains_bytes(slice.cast(), slice.len()));
 
-        let placement = Self::placement(slice, data_layout)?;
-        let ptr = SegmentHeaderPtr::new(placement.cast::<u8>());
+        // SAFETY: upheld by the caller
+        let placement = unsafe { Self::placement(slice, data_layout)? };
+        // SAFETY: upheld by the caller
+        let ptr = unsafe { SegmentHeaderPtr::new(placement.cast::<u8>()) };
         let size = placement.len();
 
-        if arena.segment_ptr_to_offset(ptr).get() > S::max_offset() || size > S::max_size() {
+        // SAFETY: `ptr` was constructed from `arena`, therefore `ptr` belongs to it.
+        if unsafe { arena.segment_ptr_to_offset(ptr) }.get() > S::max_offset()
+            || size > S::max_size()
+        {
             return None;
         }
 
@@ -170,7 +181,10 @@ impl<'a, S: Sizing> Segment<'a, S> {
     /// next one (if any), or between this segment and the end of the arena.
     pub(crate) fn trailing(&self) -> NonNull<[u8]> {
         let header_layout = Layout::new::<S::SegmentHeaderRepr>();
+        // SAFETY: By construction, all segment pointers are guarenteed to point to a header.
         let header_end = unsafe { self.ptr.byte_add(header_layout.size()) };
+        // SAFETY: By construction, all segment pointers are guarenteed to have their header
+        // followed by a memory area large enough to contain the data.
         let data_end = unsafe { header_end.byte_add(self.size) };
 
         let limit = match self.next_ptr {
@@ -178,11 +192,10 @@ impl<'a, S: Sizing> Segment<'a, S> {
             None => self.arena.end(),
         };
 
-        // TODO: Use `limit.sub_ptr(data_end)` once that's stabilized
-        let unused_size = unsafe { limit.offset_from(data_end) };
-        debug_assert!(unused_size >= 0, "negative offset");
-
-        NonNull::slice_from_raw_parts(data_end, unused_size as usize)
+        // SAFETY: `limit` either points to the next segment, or to the end of the arena. Both are
+        // expected to be at or after `data_end`.
+        let unused_size = unsafe { limit.byte_offset_from_unsigned(data_end) };
+        NonNull::slice_from_raw_parts(data_end, unused_size)
     }
 
     /// Returns a pointer to the contiguous memory space that the segment may grow into.
@@ -240,10 +253,14 @@ impl<'a, S: Sizing> Segment<'a, S> {
 
         let prev_ptr = header
             .prev_offset
-            .map(|offset| arena.segment_offset_to_ptr(offset));
+            // SAFETY: By construction, the `prev_offset` points to a valid segment in the same
+            // arena.
+            .map(|offset| unsafe { arena.segment_offset_to_ptr(offset) });
         let next_ptr = header
             .next_offset
-            .map(|offset| arena.segment_offset_to_ptr(offset));
+            // SAFETY: By construction, the `next_offset` points to a valid segment in the same
+            // arena.
+            .map(|offset| unsafe { arena.segment_offset_to_ptr(offset) });
         let size = header.size;
 
         Self {
@@ -267,10 +284,12 @@ impl<'a, S: Sizing> Segment<'a, S> {
         let header = SegmentHeader {
             prev_offset: self
                 .prev_ptr
-                .map(|ptr| self.arena.segment_ptr_to_offset(ptr)),
+                // SAFETY: By construction, `prev_ptr` points to a valid segment.
+                .map(|ptr| unsafe { self.arena.segment_ptr_to_offset(ptr) }),
             next_offset: self
                 .next_ptr
-                .map(|ptr| self.arena.segment_ptr_to_offset(ptr)),
+                // SAFETY: By construction, `next_ptr` points to a valid segment.
+                .map(|ptr| unsafe { self.arena.segment_ptr_to_offset(ptr) }),
             size: self.size,
         };
 

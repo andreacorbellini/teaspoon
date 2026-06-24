@@ -11,6 +11,8 @@ use core::ptr::NonNull;
 #[inline]
 #[must_use]
 fn slice_to_nonnull<T>(slice: &mut [T]) -> NonNull<[T]> {
+    // SAFETY: `slice` is a mutable reference, so the pointer that comes from it is guaranteed to
+    // be non-null and valid.
     let start = unsafe { NonNull::new_unchecked(slice.as_mut_ptr()) };
     let size = slice.len();
     NonNull::slice_from_raw_parts(start, size)
@@ -42,9 +44,12 @@ impl<'a, S: Sizing> Arena<'a, S> {
     /// # Safety
     ///
     /// - `slice` must be ["dereferenceable"](std::ptr#safety).
+    /// - `slice` must be valid for reads and writes.
     /// - `slice` must be alive for the lifetime of `'a`.
     /// - `slice` must not be an [*alias*](https://doc.rust-lang.org/nomicon/aliasing.html) for
     ///   another reference or pointer (in other words, `slice` is a *unique* pointer).
+    /// - `slice` must point to a contiguous memory location that is part of the same [allocated
+    ///   object](https://doc.rust-lang.org/std/ptr/index.html#allocated-object).
     #[inline]
     #[must_use]
     pub(crate) unsafe fn new(slice: NonNull<[u8]>) -> Self {
@@ -55,7 +60,10 @@ impl<'a, S: Sizing> Arena<'a, S> {
         let header_end = header_start.saturating_add(header_layout.size());
 
         let aligned_slice = if header_end <= slice.len() {
-            let header_ptr = start.byte_add(header_start).cast::<S::ArenaHeaderRepr>();
+            // SAFETY: We just verified that `slice` is large enough to contain the aligned
+            // `ArenaHeaderRepr`. `start.byte_add(header_start)` therefore cannot overflow and will
+            // point to a memory area valid for writes.
+            let header_ptr = unsafe { start.byte_add(header_start).cast::<S::ArenaHeaderRepr>() };
             debug_assert!(header_ptr.is_aligned(), "failed to align slice");
             NonNull::slice_from_raw_parts(header_ptr.cast::<u8>(), slice.len() - header_start)
         } else {
@@ -88,6 +96,8 @@ impl<'a, S: Sizing> Arena<'a, S> {
     #[inline]
     #[must_use]
     pub(crate) const fn end(&self) -> NonNull<u8> {
+        // SAFETY: The construction in `Arena::new()` guarantees that the expression below cannot
+        // overflow.
         unsafe { self.start().byte_add(self.size()) }
     }
 
@@ -102,6 +112,8 @@ impl<'a, S: Sizing> Arena<'a, S> {
         let header_layout = Layout::new::<S::ArenaHeaderRepr>();
         let segment_layout = Layout::new::<S::SegmentHeaderRepr>();
 
+        // SAFETY: The construction in `Arena::new()` guarantees that the expression below cannot
+        // overflow.
         let header_end = unsafe { self.start().byte_add(header_layout.size()) };
         let segment_offset = header_end.align_offset(segment_layout.align());
 
@@ -111,6 +123,11 @@ impl<'a, S: Sizing> Arena<'a, S> {
             .saturating_sub(segment_offset);
 
         let usable_ptr = if usable_size > 0 {
+            // SAFETY: The construction in `Arena::new()` guarantees that the memory pointed by
+            // `self.start()` is valid for at least `self.size()` bytes. A non-zero `usable_size`
+            // ensures that `self.size()` is larger than `header_layout.size() + segment_offset`.
+            // The expression below is equivalent to `self.start.byte_add(header_layout.size() +
+            // segment_offset)`, therefore it cannot overflow.
             unsafe { header_end.byte_add(segment_offset) }
         } else {
             NonNull::<S::SegmentHeaderRepr>::dangling().cast::<u8>()
@@ -123,6 +140,8 @@ impl<'a, S: Sizing> Arena<'a, S> {
         if self.size() == 0 {
             return ArenaHeader::default();
         }
+        // SAFETY: The construction in `Arena::new()` guarantees that the expression below cannot
+        // overflow.
         let header_ref = unsafe { self.start().cast::<S::ArenaHeaderRepr>().as_ref() };
         S::read_arena_header(header_ref)
     }
@@ -131,6 +150,8 @@ impl<'a, S: Sizing> Arena<'a, S> {
         if self.size() == 0 {
             return;
         }
+        // SAFETY: The construction in `Arena::new()` guarantees that the expression below cannot
+        // overflow.
         let header_mut = unsafe { self.start().cast::<S::ArenaHeaderRepr>().as_mut() };
         S::write_arena_header(header_mut, header)
     }
@@ -139,12 +160,17 @@ impl<'a, S: Sizing> Arena<'a, S> {
         let header = self.read_header();
         header
             .head_offset
-            .map(|offset| self.segment_offset_to_ptr(offset))
+            // SAFETY: By construction, `head_offset` points to a valid segment.
+            .map(|offset| unsafe { self.segment_offset_to_ptr(offset) })
     }
 
-    pub(crate) fn set_head(&mut self, ptr: Option<SegmentHeaderPtr<S>>) {
+    /// # Safety
+    ///
+    /// `ptr` (if `Some`) must be pointing to a valid segment that belongs to this arena.
+    pub(crate) unsafe fn set_head(&mut self, ptr: Option<SegmentHeaderPtr<S>>) {
         let mut header = self.read_header();
-        header.head_offset = ptr.map(|ptr| self.segment_ptr_to_offset(ptr));
+        // SAFETY: Upheld by the caller.
+        header.head_offset = ptr.map(|ptr| unsafe { self.segment_ptr_to_offset(ptr) });
         self.write_header(&header);
     }
 
@@ -152,16 +178,31 @@ impl<'a, S: Sizing> Arena<'a, S> {
         let header = self.read_header();
         header
             .tail_offset
-            .map(|offset| self.segment_offset_to_ptr(offset))
+            // SAFETY: By construction, `tail_offset` points to a valid segment.
+            .map(|offset| unsafe { self.segment_offset_to_ptr(offset) })
     }
 
-    pub(crate) fn set_tail(&mut self, ptr: Option<SegmentHeaderPtr<S>>) {
+    /// # Safety
+    ///
+    /// `ptr` (if `Some`) must be pointing to a valid segment that belongs to this arena.
+    pub(crate) unsafe fn set_tail(&mut self, ptr: Option<SegmentHeaderPtr<S>>) {
         let mut header = self.read_header();
-        header.tail_offset = ptr.map(|ptr| self.segment_ptr_to_offset(ptr));
+        // SAFETY: Upheld by the caller.
+        header.tail_offset = ptr.map(|ptr| unsafe { self.segment_ptr_to_offset(ptr) });
         self.write_header(&header);
     }
 
-    pub(crate) fn segment_offset_to_ptr(&self, offset: NonZero<usize>) -> SegmentHeaderPtr<S> {
+    /// # Safety
+    ///
+    /// `offset`, when added to `self.start()`, must be pointing to a memory area that:
+    /// - belongs to this arena;
+    /// - contains a segment header.
+    ///
+    /// Adding `offset` to `self.start()` must not cause an overflow.
+    pub(crate) unsafe fn segment_offset_to_ptr(
+        &self,
+        offset: NonZero<usize>,
+    ) -> SegmentHeaderPtr<S> {
         let start = self.start();
         let offset = offset.get();
         let size = size_of::<S::SegmentHeaderRepr>();
@@ -174,25 +215,31 @@ impl<'a, S: Sizing> Arena<'a, S> {
             limit <= self.size(),
             "`offset` exceeds the size of the arena"
         );
+        // SAFETY: upheld by the caller
         let ptr = unsafe { start.byte_add(offset) };
         debug_assert!(
             self.contains_bytes(ptr, size),
             "arena does not contain a segment at the given `offset`"
         );
+        // SAFETY: upheld by the caller
         unsafe { SegmentHeaderPtr::new(ptr) }
     }
 
-    pub(crate) fn segment_ptr_to_offset(&self, ptr: SegmentHeaderPtr<S>) -> NonZero<usize> {
+    /// # Safety
+    ///
+    /// `ptr` must be pointing to a valid segment that belongs to this arena.
+    pub(crate) unsafe fn segment_ptr_to_offset(&self, ptr: SegmentHeaderPtr<S>) -> NonZero<usize> {
         debug_assert!(
             self.contains_segment(ptr),
             "`ptr` does not belong to the arena"
         );
 
+        // SAFETY: The caller ensures that `ptr` points to a segment that belongs to this arena.
+        // This implies that `ptr` must be `> self.start()` (therefore `offset` is non-zero and
+        // positive), and `ptr` belongs to the same allocation as `self.start()`.
         unsafe {
-            // TODO: Use `ptr.as_nonnull().sub_ptr(self.start())` once that's stabilized
-            let offset = ptr.as_nonnull().byte_offset_from(self.start());
-            debug_assert!(offset >= 0, "negative offset");
-            NonZero::new_unchecked(offset as usize)
+            let offset = ptr.as_nonnull().byte_offset_from_unsigned(self.start());
+            NonZero::new_unchecked(offset)
         }
     }
 
@@ -224,6 +271,8 @@ impl<'a, S: Sizing> Arena<'a, S> {
 impl<'a, S: Sizing> From<&'a mut [u8]> for Arena<'a, S> {
     fn from(slice: &'a mut [u8]) -> Self {
         let slice = slice_to_nonnull(slice);
+        // SAFETY: `slice` comes from a mutable reference, therefore it's a valid pointer, alive
+        // for the lifetime of `'a`, respecting Rust's aliasing rules.
         unsafe { Self::new(slice) }
     }
 }

@@ -50,16 +50,16 @@ impl<'a, S: Sizing> Iterator for ArenaChunks<'a, S> {
                         // any)
                         Some(head) => {
                             let usable = self.arena.usable().cast::<u8>();
-                            // TODO: Use `head.sub_ptr(usable)` once that's stabilized
-                            let unused_size = unsafe { head.byte_offset_from(usable) };
-                            debug_assert!(unused_size >= 0, "negative offset");
-                            let unused =
-                                NonNull::slice_from_raw_parts(usable, unused_size as usize);
+                            // SAFETY: Every allocated object is guaranteed to lay into the
+                            // `usable` area of the arena, therefore `usable >= head`.
+                            let unused_size = unsafe { head.byte_offset_from_unsigned(usable) };
+                            let unused = NonNull::slice_from_raw_parts(usable, unused_size);
                             (Some(Chunk::Unused(unused)), State::BeforeSegment(head))
                         }
                     }
                 }
                 State::BeforeSegment(segment_ptr) => {
+                    // SAFETY: `segment_ptr` belongs to `self.arena`.
                     let segment = unsafe { Segment::read(self.arena, segment_ptr) };
                     (Some(Chunk::Used(segment)), State::AtSegment(segment))
                 }
@@ -75,10 +75,10 @@ impl<'a, S: Sizing> Iterator for ArenaChunks<'a, S> {
 
             self.state = new_state;
 
-            if let Some(Chunk::Unused(unused)) = item {
-                if unused.is_empty() {
-                    continue;
-                }
+            if let Some(Chunk::Unused(unused)) = item
+                && unused.is_empty()
+            {
+                continue;
             }
 
             break item;
