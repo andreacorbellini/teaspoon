@@ -638,9 +638,7 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
 
     fn allocate(&mut self, layout: Layout) -> Option<NonNull<[u8]>> {
         if layout.size() == 0 {
-            // SAFETY: `Layout` guarantees that `align` is non-zero
-            // TODO switch to `layout.dangling()` once it's stabilized
-            let dangling = unsafe { NonNull::new_unchecked(layout.align() as *mut u8) };
+            let dangling = layout.dangling_ptr();
             return Some(NonNull::slice_from_raw_parts(dangling, 0));
         }
 
