@@ -13,7 +13,7 @@ use crate::sizing::Sizing128KiB;
 use core::alloc::GlobalAlloc;
 use core::alloc::Layout;
 use core::ops::Deref;
-use spin::Lazy;
+use spin::LazyLock;
 
 #[cfg(feature = "allocator-api")]
 use core::alloc::AllocError;
@@ -79,7 +79,9 @@ pub type LazyTeaspoon4KiB<F = fn() -> Teaspoon<'static, Sizing4KiB>> = LazyTeasp
 /// let _ = unsafe { SPOON.alloc(Layout::new::<u32>()) };
 /// ```
 #[derive(Debug)]
-pub struct LazyTeaspoon<S: Sizing, F = fn() -> Teaspoon<'static, S>>(Lazy<Teaspoon<'static, S>, F>);
+pub struct LazyTeaspoon<S: Sizing, F = fn() -> Teaspoon<'static, S>>(
+    LazyLock<Teaspoon<'static, S>, F>,
+);
 
 impl<S: Sizing, F> LazyTeaspoon<S, F> {
     /// Constructs a new [`LazyTeaspoon`] from the given initialization function.
@@ -89,7 +91,7 @@ impl<S: Sizing, F> LazyTeaspoon<S, F> {
     #[inline]
     #[must_use]
     pub const fn new(f: F) -> Self {
-        Self(Lazy::new(f))
+        Self(LazyLock::new(f))
     }
 }
 

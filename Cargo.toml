@@ -12,7 +12,7 @@ keywords = ["memory", "allocator", "no-std"]
 categories = ["memory-management", "no-std"]
 
 [dependencies]
-spin = { version = "0.9.8", default-features = false, features = ["mutex", "spin_mutex"] }
+spin = { version = "0.12.1", default-features = false, features = ["mutex", "spin_mutex"] }
 
 [dev-dependencies]
 rand = { version = "0.8.5", default-features = false, features = ["small_rng"] }

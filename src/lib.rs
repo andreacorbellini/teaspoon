@@ -120,7 +120,7 @@
 //! [`LazyTeaspoon`](lazy::LazyTeaspoon) is initialized on first use by calling the initialization
 //! function passed to [`new`](lazy::LazyTeaspoon::new).
 //!
-//! [`LazyTeaspoon`](lazy::LazyTeaspoon) is a simple wrapper around [`spin::Lazy`] (which is a
+//! [`LazyTeaspoon`](lazy::LazyTeaspoon) is a simple wrapper around [`spin::LazyLock`] (which is a
 //! `no_std` equivalent to [`std::sync::LazyLock`]) that implements the [`GlobalAlloc`] and
 //! [`Allocator`] traits. There's nothing too special about it--you can write your own custom
 //! wrapper if you need to.
