@@ -787,7 +787,8 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
 
         // SAFETY: Upheld by the caller.
         unsafe {
-            let segment = Segment::read(self.arena, data_ptr.to_header_ptr());
+            let header_ptr = data_ptr.to_header_ptr(self.arena);
+            let segment = Segment::read(self.arena, header_ptr);
             self.remove_segment(segment)
         }
     }
@@ -885,8 +886,10 @@ impl<'a, S: Sizing> TeaspoonInner<'a, S> {
             "arena is expected to be non-empty, but does not have a tail pointer"
         );
 
+        let header_ptr = unsafe { data_ptr.to_header_ptr(self.arena) };
+
         let copy_size = cmp::min(old_layout.size(), new_layout.size());
-        let old_segment = unsafe { Segment::read(self.arena, data_ptr.to_header_ptr()) };
+        let old_segment = unsafe { Segment::read(self.arena, header_ptr) };
         let old_data = old_segment.data(old_layout);
 
         match unsafe { Segment::new_in(self.arena, old_segment.available(), new_layout) } {

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 use crate::sizing::Sizing;
+use crate::Arena;
 use core::alloc::Layout;
 use core::fmt;
 use core::marker::PhantomData;
@@ -89,14 +90,29 @@ impl<S: Sizing> SegmentDataPtr<S> {
         }
     }
 
-    pub(crate) unsafe fn to_header_ptr(self) -> SegmentHeaderPtr<S> {
+    /// # Safety
+    ///
+    /// `self` must belong to `arena`.
+    pub(crate) unsafe fn to_header_ptr(self, arena: Arena<'_, S>) -> SegmentHeaderPtr<S> {
         let header_layout = Layout::new::<S::SegmentHeaderRepr>();
         let pad = ((self.data_ptr.as_ptr() as usize) - header_layout.size())
             & (header_layout.align() - 1);
+
+        // We could retrieve the header pointer by simply taking `self.data_ptr` and subtracting
+        // `header_layout.size() + pad`, however doing so confuses Miri and makes its stacked borrow
+        // checks fail.
+        //
+        // Involving `arena` in the math is not technically necessary, but it makes Miri understand
+        // that we're getting a pointer that was derived from a valid read-only reference.
+
         // SAFETY: The caller of `SegmentDataPtr::new()` ensures that this pointer is preceeded by
-        // a header.
+        // a header. The caller of this method (`to_header_ptr()`) ensures that this pointer belongs
+        // to `arena`.
         unsafe {
-            let header_ptr = self.data_ptr.byte_sub(header_layout.size()).byte_sub(pad);
+            let data_offset = self.data_ptr.byte_offset_from(arena.start());
+            debug_assert!(data_offset > 0, "pointer does not belong to the arena");
+            let header_offset = (data_offset as usize) - (header_layout.size() + pad);
+            let header_ptr = arena.start().byte_add(header_offset);
             SegmentHeaderPtr::<S>::new(header_ptr)
         }
     }
