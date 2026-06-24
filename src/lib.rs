@@ -290,8 +290,7 @@ pub type Teaspoon4KiB<'a> = Teaspoon<'a, Sizing4KiB>;
 ///
 /// `Teaspoon` can be constructed from either a pointer (unsafe) or a slice, and may be accessed
 /// using either the [`GlobalAlloc`] or [`Allocator`] traits. See the [module-level
-/// documentation](file:///home/andrea/src/teaspoon/target/doc/teaspoon/index.html#quick-start--examples)
-/// for details and examples.
+/// documentation](index.html#quick-start--examples) for details and examples.
 #[derive(Debug)]
 pub struct Teaspoon<'a, S: Sizing> {
     inner: Mutex<TeaspoonInner<'a, S>>,
