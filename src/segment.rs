@@ -213,15 +213,15 @@ impl<'a, S: Sizing> Segment<'a, S> {
             None => self.arena.end(),
         };
 
-        // TODO: Use `limit.sub_ptr(data_end)` once that's stabilized
-        let available_size = unsafe { limit.offset_from(header_start) };
-        debug_assert!(available_size >= 0, "negative offset");
-
-        NonNull::slice_from_raw_parts(header_start, available_size as usize)
+        // SAFETY: `limit` either points to the next segment, or to the end of the arena. Both are
+        // expected to be at or after `data_end`.
+        let available_size = unsafe { limit.byte_offset_from_unsigned(header_start) };
+        NonNull::slice_from_raw_parts(header_start, available_size)
     }
 
     pub(crate) fn prev(&self) -> Option<Self> {
         self.prev_ptr
+            // SAFETY: `prev_ptr` is guaranteed to belong to the arena.
             .map(|prev_ptr| unsafe { Self::read(self.arena, prev_ptr) })
     }
 
@@ -231,6 +231,7 @@ impl<'a, S: Sizing> Segment<'a, S> {
 
     pub(crate) fn next(&self) -> Option<Self> {
         self.next_ptr
+            // SAFETY: `next_ptr` is guaranteed to belong to the arena.
             .map(|next_ptr| unsafe { Self::read(self.arena, next_ptr) })
     }
 
@@ -238,6 +239,9 @@ impl<'a, S: Sizing> Segment<'a, S> {
         self.next_ptr
     }
 
+    /// # Safety
+    ///
+    /// `ptr` must belong to `arena`.
     #[inline]
     #[must_use]
     pub(crate) unsafe fn read(arena: Arena<'a, S>, ptr: SegmentHeaderPtr<S>) -> Self {
@@ -248,6 +252,10 @@ impl<'a, S: Sizing> Segment<'a, S> {
             "pointer does not belong to the arena"
         );
 
+        // SAFETY: `header_ptr` is a valid because it was constructed from `SegmentHeaderPtr`. The
+        // code of this crate does not store any mutable references to segments, and uses locking
+        // to ensure that multiple threads cannot have access to the same arena at the same time,
+        // so Rust's aliasing rules are always respected.
         let repr_ref = unsafe { header_ptr.as_ref() };
         let header = S::read_segment_header(repr_ref);
 
@@ -293,6 +301,10 @@ impl<'a, S: Sizing> Segment<'a, S> {
             size: self.size,
         };
 
+        // SAFETY: `header_ptr` is a valid because it was constructed from `self`. The code of this
+        // crate does not store any mutable references to segments, and uses locking to ensure that
+        // multiple threads cannot have access to the same arena at the same time, so Rust's
+        // aliasing rules are always respected.
         let repr_mut = unsafe { header_ptr.as_mut() };
         S::write_segment_header(repr_mut, &header);
     }

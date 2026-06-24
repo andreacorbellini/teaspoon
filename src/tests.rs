@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 #![cfg(feature = "allocator-api")]
+#![allow(clippy::undocumented_unsafe_blocks)]
 
 extern crate alloc;
 
@@ -110,7 +111,7 @@ fn random<S: Sizing>() {
     fn resize_random<A: Allocator, R: Rng>(
         allocator: A,
         mut rng: R,
-        objects: &mut Vec<(NonNull<[u8]>, Layout)>,
+        objects: &mut [(NonNull<[u8]>, Layout)],
     ) {
         if objects.is_empty() {
             return;
